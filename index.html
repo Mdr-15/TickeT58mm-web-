@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ticket Space Wings 58mm</title>
+    <!-- Librería nativa para generar códigos QR sin depender de APIs externas -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <style>
+        body { font-family: 'Courier New', monospace; margin: 0; padding: 5px; display: flex; flex-direction: column; align-items: center; background: #eee; }
+        
+        /* Ancho crítico optimizado para papel de 58mm (aprox. 200px libres) */
+        .ticket { width: 200px; background: white; padding: 4px; box-sizing: border-box; }
+        
+        /* Estilo Logotipo */
+        .header { text-align: center; border-bottom: 1.5px solid #000; margin-bottom: 6px; padding-bottom: 6px; }
+        .logo-text { font-size: 18px; font-weight: bold; letter-spacing: 1px; }
+        .sub-logo { font-size: 9px; text-transform: uppercase; }
+
+        /* Ajuste de fuentes para evitar desbordes */
+        .info { font-size: 10px; margin-bottom: 8px; line-height: 1.2; }
+        table { width: 100%; border-collapse: collapse; font-size: 10px; }
+        th { border-bottom: 1px solid #000; text-align: left; padding: 3px 0; }
+        td { padding: 4px 0; border-bottom: 1px dashed #ccc; vertical-align: top; }
+        td:nth-child(3) { white-space: nowrap; }
+        
+        .total-box { margin-top: 10px; text-align: right; border-top: 1.5px solid #000; padding-top: 4px; font-size: 13px; }
+        
+        /* Contenedor del QR local */
+        .qr-container { display: flex; justify-content: center; margin-top: 12px; margin-bottom: 4px; }
+
+        /* Pie de ticket */
+        .footer { text-align: center; font-size: 9px; margin-top: 10px; border-top: 1px solid #eee; padding-top: 6px; line-height: 1.2; }
+        .socials { font-weight: bold; margin-top: 4px; font-size: 9px; }
+
+        .btn { margin-bottom: 10px; padding: 10px; background: #000; color: #fff; border: none; width: 200px; cursor: pointer; font-weight: bold; border-radius: 4px; font-size: 12px; }
+        
+        @media print { 
+            .btn { display: none; } 
+            body { padding: 0; margin: 0; background: white; } 
+            .ticket { width: 200px; padding: 0; margin: 0; } 
+        }
+    </style>
+</head>
+<body>
+    <button class="btn" onclick="window.print()">🖨️ IMPRIMIR TICKET</button>
+    
+    <div class="ticket">
+        <div class="header">
+            <div class="logo-text">SPACE WINGS</div>
+            <div class="sub-logo">Sabor que te eleva</div>
+        </div>
+
+        <div class="info">
+            <b>ORDEN:</b> <span id="id_p"></span><br>
+            <b>CLIENTE:</b> <span id="cli"></span><br>
+            <b>FECHA:</b> <span id="fec"></span>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 25px;">CAN</th>
+                    <th>PRODUCTO</th>
+                    <th style="text-align:right; width: 55px;">TOTAL</th>
+                </tr>
+            </thead>
+            <tbody id="tabla"></tbody>
+        </table>
+
+        <div class="total-box">
+            <strong>TOTAL: $<span id="tot"></span></strong>
+        </div>
+
+        <!-- Contenedor div para el código QR autogenerado -->
+        <div class="qr-container">
+            <div id="qrcode"></div>
+        </div>
+
+        <div class="footer">
+            ¡GRACIAS POR TU PREFERENCIA!<br>
+            <div class="socials">
+                📱 WA: 341-159-4355<br>
+               
+                
+            </div>
+            <p style="font-size: 8px; margin-top: 6px;">*** Comprobante de Venta ***</p>
+        </div>
+    </div>
+
+    <script>
+        const p = new URLSearchParams(window.location.search);
+        const idOrden = p.get('id') || '---';
+        const cliente = p.get('cliente') || 'VENTA GENERAL';
+        const fecha = p.get('fecha') || new Date().toLocaleString();
+        
+        // CORRECCIÓN DECIMALES: Convierte el parámetro total a número flotante y fuerza dos decimales
+        const totalRaw = parseFloat(p.get('total'));
+        const total = isNaN(totalRaw) ? '0.00' : totalRaw.toFixed(2);
+
+        document.getElementById('id_p').textContent = idOrden;
+        document.getElementById('cli').textContent = cliente;
+        document.getElementById('fec').textContent = fecha;
+        document.getElementById('tot').textContent = total;
+
+const datosRaw = p.get('d') || "";
+const renglones = datosRaw.split('*');
+const t = document.getElementById('tabla');
+
+renglones.forEach(r => {
+    const rLimpio = r.trim();
+    if (rLimpio === "" || rLimpio === ",") return;
+    
+    const col = rLimpio.split('|'); 
+    
+    // Si es un renglón de producto normal (tiene cantidad, nombre y precio)
+    if (col.length >= 3) {
+        let row = t.insertRow();
+        let cant = col[0].trim();
+        row.insertCell(0).textContent = (cant === "" || cant === "0" || cant.length > 4) ? "1" : cant;
+        row.insertCell(1).textContent = col[1].trim().replace('()', '').replace('(0)', '');
+        
+        let pCell = row.insertCell(2);
+        let precioNum = parseFloat(col[2]);
+        pCell.textContent = isNaN(precioNum) ? "0.00" : precioNum.toFixed(2);
+        pCell.style.textAlign = 'right';
+    } 
+    // Si es una línea de salsa o especificación (no tiene precios ni barras "|")
+    else if (col.length === 1 && rLimpio.includes('└')) {
+        let row = t.insertRow();
+        row.insertCell(0).textContent = ""; // Celda de cantidad vacía
+        
+        let subCell = row.insertCell(1);
+        subCell.textContent = rLimpio;
+        subCell.style.fontSize = "9px"; // Texto un poco más pequeño para que no desborde
+        subCell.style.paddingLeft = "5px";
+        
+        row.insertCell(2).textContent = ""; // Celda de precio vacía
+    }
+});
+
+
+        // SOLUCIÓN QR DEFINITIVA: Renderizado directo sin consultar APIs externas
+        const textoQR = `Orden:${idOrden}\nTotal:$${total}\nSpace Wings`;
+        new QRCode(document.getElementById("qrcode"), {
+            text: textoQR,
+            width: 100,
+            height: 100,
+            colorDark : "#000000",
+            colorLight : "#ffffff",
+            correctLevel : QRCode.CorrectLevel.M
+        });
+
+        if(p.get('auto') === 'true') {
+            setTimeout(() => { window.print(); }, 1200);
+        }
+    </script>
+</body>
+</html>
