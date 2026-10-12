@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ticket Space Wings 58mm</title>
     <!-- Librería nativa para generar códigos QR sin depender de APIs externas -->
-  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <style>
         body { font-family: 'Courier New', monospace; margin: 0; padding: 5px; display: flex; flex-direction: column; align-items: center; background: #eee; }
         
@@ -24,7 +24,10 @@
         td { padding: 4px 0; border-bottom: 1px dashed #ccc; vertical-align: top; }
         td:nth-child(3) { white-space: nowrap; }
         
-        .total-box { margin-top: 10px; text-align: right; border-top: 1.5px solid #000; padding-top: 4px; font-size: 13px; }
+        /* Modificado: Contenedor de Desglose de Totales */
+        .total-box-wrapper { margin-top: 10px; border-top: 1.5px solid #000; padding-top: 4px; font-size: 10px; line-height: 1.3; }
+        .total-row { display: flex; justify-content: space-between; }
+        .total-box { font-size: 13px; font-weight: bold; margin-top: 4px; border-top: 1px dashed #000; padding-top: 4px; }
         
         /* Contenedor del QR local */
         .qr-container { display: flex; justify-content: center; margin-top: 12px; margin-bottom: 4px; }
@@ -54,6 +57,9 @@
         <div class="info">
             <b>ORDEN:</b> <span id="id_p"></span><br>
             <b>CLIENTE:</b> <span id="cli"></span><br>
+            <!-- NUEVO: Entrega y Dirección dinámica -->
+            <b>ENTREGA:</b> <span id="ent"></span><br>
+            <span id="dir-container" style="display:none;"><b>DIR:</b> <span id="dir"></span><br></span>
             <b>FECHA:</b> <span id="fec"></span>
         </div>
         
@@ -68,8 +74,20 @@
             <tbody id="tabla"></tbody>
         </table>
 
-        <div class="total-box">
-            <strong>TOTAL: $<span id="tot"></span></strong>
+        <!-- MODIFICADO: Bloque con desglose de Subtotal, Envío y Total -->
+        <div class="total-box-wrapper">
+            <div class="total-row">
+                <span>Subtotal:</span>
+                <span>\$<span id="sub">0.00</span></span>
+            </div>
+            <div class="total-row">
+                <span>Envío:</span>
+                <span>\$<span id="env">0.00</span></span>
+            </div>
+            <div class="total-row total-box">
+                <span>TOTAL:</span>
+                <span>\$<span id="tot">0.00</span></span>
+            </div>
         </div>
 
         <!-- Contenedor div para el código QR autogenerado -->
@@ -81,8 +99,6 @@
             ¡GRACIAS POR TU PREFERENCIA!<br>
             <div class="socials">
                 📱 WA: 341-159-4355<br>
-               
-                
             </div>
             <p style="font-size: 8px; margin-top: 6px;">*** Comprobante de Venta ***</p>
         </div>
@@ -94,51 +110,74 @@
         const cliente = p.get('cliente') || 'VENTA GENERAL';
         const fecha = p.get('fecha') || new Date().toLocaleString();
         
-        // CORRECCIÓN DECIMALES: Convierte el parámetro total a número flotante y fuerza dos decimales
+        // NUEVOS PARÁMETROS: Tipo de entrega y dirección
+        const tipoEntrega = p.get('entrega') || 'recoger'; 
+        const calle = p.get('calle') || '';
+        const colonia = p.get('colonia') || '';
+
+        // CORRECCIÓN DECIMALES Y DESGLOSE EN EL TICKET
+        const subtotalRaw = parseFloat(p.get('subtotal'));
+        const subtotal = isNaN(subtotalRaw) ? '0.00' : subtotalRaw.toFixed(2);
+
+        const envioRaw = parseFloat(p.get('envio'));
+        const envio = isNaN(envioRaw) ? '0.00' : envioRaw.toFixed(2);
+
         const totalRaw = parseFloat(p.get('total'));
         const total = isNaN(totalRaw) ? '0.00' : totalRaw.toFixed(2);
 
+        // Inyectar datos generales
         document.getElementById('id_p').textContent = idOrden;
         document.getElementById('cli').textContent = cliente;
         document.getElementById('fec').textContent = fecha;
+        
+        // Inyectar desgloses de dinero
+        document.getElementById('sub').textContent = subtotal;
+        document.getElementById('env').textContent = envio;
         document.getElementById('tot').textContent = total;
 
-const datosRaw = p.get('d') || "";
-const renglones = datosRaw.split('*');
-const t = document.getElementById('tabla');
+        // Formatear visualmente el tipo de entrega en el ticket
+        if (tipoEntrega.toLowerCase() === 'domicilio') {
+            document.getElementById('ent').textContent = "DOMICILIO";
+            document.getElementById('dir').textContent = `${calle}, Col. ${colonia}`;
+            document.getElementById('dir-container').style.display = 'inline'; // Muestra la dirección
+        } else {
+            document.getElementById('ent').textContent = "RECOGER EN TIENDA";
+            document.getElementById('dir-container').style.display = 'none'; // Esconde la dirección
+        }
 
-renglones.forEach(r => {
-    const rLimpio = r.trim();
-    if (rLimpio === "" || rLimpio === ",") return;
-    
-    const col = rLimpio.split('|'); 
-    
-    // Si es un renglón de producto normal (tiene cantidad, nombre y precio)
-    if (col.length >= 3) {
-        let row = t.insertRow();
-        let cant = col[0].trim();
-        row.insertCell(0).textContent = (cant === "" || cant === "0" || cant.length > 4) ? "1" : cant;
-        row.insertCell(1).textContent = col[1].trim().replace('()', '').replace('(0)', '');
-        
-        let pCell = row.insertCell(2);
-        let precioNum = parseFloat(col[2]);
-        pCell.textContent = isNaN(precioNum) ? "0.00" : precioNum.toFixed(2);
-        pCell.style.textAlign = 'right';
-    } 
-    // Si es una línea de salsa o especificación (no tiene precios ni barras "|")
-    else if (col.length === 1 && rLimpio.includes('└')) {
-        let row = t.insertRow();
-        row.insertCell(0).textContent = ""; // Celda de cantidad vacía
-        
-        let subCell = row.insertCell(1);
-        subCell.textContent = rLimpio;
-        subCell.style.fontSize = "9px"; // Texto un poco más pequeño para que no desborde
-        subCell.style.paddingLeft = "5px";
-        
-        row.insertCell(2).textContent = ""; // Celda de precio vacía
-    }
-});
+        const datosRaw = p.get('d') || "";
+        const renglones = datosRaw.split('*');
+        const t = document.getElementById('tabla');
 
+        renglones.forEach(r => {
+            const rLimpio = r.trim();
+            if (rLimpio === "" || rLimpio === ",") return;
+            
+            const col = rLimpio.split('|'); 
+            
+            if (col.length >= 3) {
+                let row = t.insertRow();
+                let cant = col[0].trim();
+                row.insertCell(0).textContent = (cant === "" || cant === "0" || cant.length > 4) ? "1" : cant;
+                row.insertCell(1).textContent = col[1].trim().replace('()', '').replace('(0)', '');
+                
+                let pCell = row.insertCell(2);
+                let precioNum = parseFloat(col[2]);
+                pCell.textContent = isNaN(precioNum) ? "0.00" : precioNum.toFixed(2);
+                pCell.style.textAlign = 'right';
+            } 
+            else if (col.length === 1 && rLimpio.includes('└')) {
+                let row = t.insertRow();
+                row.insertCell(0).textContent = ""; 
+                
+                let subCell = row.insertCell(1);
+                subCell.textContent = rLimpio;
+                subCell.style.fontSize = "9px"; 
+                subCell.style.paddingLeft = "5px";
+                
+                row.insertCell(2).textContent = ""; 
+            }
+        });
 
         // SOLUCIÓN QR DEFINITIVA: Renderizado directo sin consultar APIs externas
         const textoQR = `Orden:${idOrden}\nTotal:$${total}\nSpace Wings`;
@@ -157,3 +196,4 @@ renglones.forEach(r => {
     </script>
 </body>
 </html>
+
